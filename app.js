@@ -1,5 +1,6 @@
 const process_dir = require("./process_dir");
 const mongo_store = require("./mongo_store");
+const path = require('path');
 const Q = require('q');
 
 var test_store = {
@@ -26,10 +27,12 @@ if (process.argv[2] === "DELETE") {
 
 } else {
     mongo_store.open().then(function(store) {
+        var fullpath = path.resolve("/jha");
         console.log("Processing")
-        return process_dir.process("/jha/nmap-7.00", store).then((res) => {
-            console.log("Done with dir");
-            console.log(res);
+        return process_dir.process(fullpath, store).then((res) => {
+            return store.storeBackup(fullpath,res);
+        }).then((backup_key) => {
+            console.log("Done with backing up dir.  Backup key: " + JSON.stringify(backup_key));
         }).finally(() => {
             process_dir.close();
             return store.close();

@@ -5,7 +5,7 @@ module.exports = {
 		return module.exports.hash(JSON.stringify(obj));
 	},
 	hash: function(buffer) {
-		var shasum = crypto.createHash('sha1');
+		var shasum = crypto.createHash('sha256');
 		shasum.update(buffer);
 		return shasum.digest('hex');
 	}

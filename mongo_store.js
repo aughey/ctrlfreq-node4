@@ -2,6 +2,7 @@ const MongoClient = require("mongodb").MongoClient;
 const Q = require('q');
 const mongo_url = 'mongodb://localhost:27017/ctrlfreq4';
 var hash = require('./hash');
+var zlib = require('zlib');
 
 
 function open(fast) {
@@ -12,13 +13,7 @@ function open(fast) {
             if (!fast) {
                 var qs = [];
                 qs.push(db.collection('chunks').count());
-                qs.push(db.collection('files').count());
                 qs.push(db.collection('dirs').count());
-                qs.push(db.collection('files').createIndex({
-                    unique_id: 1
-                }, {
-                    unique: true
-                }));
 
                 return Q.all(qs);
             } else {
@@ -27,14 +22,12 @@ function open(fast) {
         })
         .then((results) => {
             console.log("Chunks: " + results[0]);
-            console.log("Files: " + results[1]);
-            console.log("Directories: " + results[2]);
+            console.log("Directories: " + results[1]);
         })
         .then(function() {
             var db = g_db;
             console.log("Connected to mongo");
             var chunks = db.collection("chunks");
-            var file_collection = db.collection("files");
             var dir_collection = db.collection("dirs");
 
             function isChunkStored(key) {
@@ -58,73 +51,90 @@ function open(fast) {
             return {
 
                 hasAllChunks: function(c) {
-                    return chunks.find({_id: { $all:  c }}).count().then(function(count) {
-                        console.log(count + " " + c.length);
+                    return chunks.find({
+                        _id: {
+                            $in: c
+                        }
+                    }).count().then(function(count) {
                         return count === c.length;
                     })
                 },
                 storeChunk: function(chunk) {
                     var digest = hash.hash(chunk);
 
-                    // Storing data has an unavoidable race condition
-                    // that can cause an exception that we will catch
-                    // here
-
-                    var deferred = Q.defer();
 
                     return isChunkStored(digest).then((isstored) => {
                         if (isstored) {
                             return digest;
                             deferred.resolve(digest);
                         } else {
-                            return chunks.insert({
-                                _id: digest,
-                                data: chunk
-                            }, {
-                                continueOnError: true
-                            }).then(() => {
-                                return digest;
-                                deferred.resolve(digest);
-                            }).catch((e) => {
-                                //  console.log("!!!! inside catch");
-                                //                             deferred.resolve(digest);
-                                return digest;
-                            })
+                            return Q.ninvoke(zlib, 'deflate', chunk).then((compressed_buffer) => {
+                                return chunks.insert({
+                                    _id: digest,
+                                    stored_on: new Date(),
+                                    compressed: true,
+                                    data: compressed_buffer
+                                }, {
+                                    continueOnError: true
+                                }).then(() => {
+                                    return digest;
+                                    deferred.resolve(digest);
+                                }).catch((e) => {
+                                    if (e.code === 11000) {
+                                        return digest;
+                                    } else {
+                                        throw (e);
+                                    }
+                                });
+                            });
                         }
                     });
 
                 },
-                storeFile: function(info, chunks) {
-                    return Q(file_collection.insert({
-                        unique_id: info.unique_id,
-                        info: info,
-                        chunks: chunks,
-                        stored_on: new Date(),
-                    }).then(function(res) {
-                        return res.insertedIds[0];
-                    }));
-                },
                 storeDirectory: function(fullpath, dirs, files) {
+                    var key = ['{fullpath:', JSON.stringify(fullpath), ", dirs:", JSON.stringify(dirs), ", files:", JSON.stringify(files), '}'].join('');
+                    var digest = hash.hash(key);
+
                     return Q(dir_collection.insert({
+                        _id: digest,
                         dirs: dirs,
                         files: files,
                         path: fullpath,
                         stored_on: new Date(),
                     }).then(function(res) {
-                        return res.insertedIds[0];
-                    }));
+                        return digest;
+                    })).catch((e) => {
+                        if (e.code === 11000) {
+                            return digest;
+                        } else {
+                            throw (e);
+                        }
+                    });
+                },
+                storeBackup: function(fullpath, root_key) {
+                    return db.collection('backups').insert({
+                        path: fullpath,
+                        stored_on: new Date(),
+                        root: root_key
+                    }).then((res) => {
+                        return {
+                            backup_id: res.ops[0]._id,
+                            root: root_key
+                        };
+                    });
                 },
                 close: function() {
                     var qs = [];
                     qs.push(db.collection('chunks').count());
-                    qs.push(db.collection('files').count());
                     qs.push(db.collection('dirs').count());
-                    qs.push(db.close());
+                    qs.push(db.stats());
                     return Q.all(qs).then((results) => {
                         console.log("Chunks: " + results[0]);
-                        console.log("Files: " + results[1]);
-                        console.log("Directories: " + results[2]);
-                    });
+                        console.log("Directories: " + results[1]);
+                        console.log("Stats: " + JSON.stringify(results[2]));
+                    }).then(() => {
+                        qs.push(db.close());
+                    })
                 },
                 DELETE: function() {
                     return db.dropDatabase('ctrlfreq4');

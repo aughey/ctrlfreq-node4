@@ -41,7 +41,7 @@ function chunkFile(file, store) {
     }).catch((error) => {
         console.log("Error reading: " + file.fullpath);
         console.log(typeof error);
-        console.log(error);
+        console.log(JSON.stringify(error));
         return null;
     })
 }
@@ -58,6 +58,10 @@ function obj_equals(a, b) {
 function processFile(file, store) {
     function doanyway() {
         return chunkFile(file, store).then((chunks) => {
+            if(!chunks) {
+                return null;
+            }
+
             return stat_cache.set(file.fullpath, {
                 stat: file.stat,
                 chunks: chunks
@@ -74,6 +78,8 @@ function processFile(file, store) {
                 if (hasall) {
                     return olddata.chunks;
                 } else {
+                    console.log("Weird: The store didn't have my chunks");
+                    console.log(JSON.stringify(olddata.chunks));
                     return doanyway();
                 }
             });
@@ -111,6 +117,7 @@ function safeStat(fullpath) {
 }
 
 function process(dirname, store) {
+    // Clean up the path
     dirname = path.resolve(dirname);
     var dirobj = {
         path: dirname
