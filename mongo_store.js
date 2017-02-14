@@ -1,9 +1,12 @@
 const MongoClient = require("mongodb").MongoClient;
 const Q = require('q');
-const mongo_url = 'mongodb://localhost:27017/ctrlfreq4';
+var mongo_url = 'mongodb://localhost:27017/ctrlfreq4';
 var hash = require('./hash');
 var zlib = require('zlib');
 
+if(process.env.CTRLFREQ4_MONGO) {
+    mongo_url = process.env.CTRLFREQ4_MONGO;
+}
 
 function open(fast) {
     var g_db = null;
