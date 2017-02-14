@@ -10,6 +10,8 @@
   "license": "ISC",
   "dependencies": {
     "q" : ">0.0.1",
-    "mongodb" : ">0.0.1"
+    "mongodb" : ">0.0.1",
+    "leveldown" : ">0.0.1",
+    "levelup" : ">0.0.1"
   }
 }

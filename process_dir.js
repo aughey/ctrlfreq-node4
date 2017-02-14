@@ -3,7 +3,7 @@ var Q = require('q');
 var path = require('path');
 var excludes = require('./file_excludes');
 var hash = require('./hash');
-var stat_cache = require("./stat_cache");
+var stat_cache = require("./stat_cache_level");
 
 function chunkFile(file, store) {
     var g_fd = null;
@@ -14,7 +14,7 @@ function chunkFile(file, store) {
         var chunks = [];
 
         function nextChunk() {
-            var size = 1048576;
+            var size = 1048576*2*2; // 4M chunks
             var buffer = new Buffer(size);
             return Q.nfcall(fs.read, fd, buffer, 0, size, null).then((bytesread) => {
                 bytesread = bytesread[0];

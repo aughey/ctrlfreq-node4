@@ -26,17 +26,25 @@ if (process.argv[2] === "DELETE") {
     }).done();
 
 } else {
+    var paths = process.argv.slice(0);
+    paths.shift();
+    paths.shift();
+    console.log(paths);
     mongo_store.open().then(function(store) {
-        var fullpath = path.resolve("/jha");
-        console.log("Processing")
-        return process_dir.process(fullpath, store).then((res) => {
-            return store.storeBackup(fullpath,res);
-        }).then((backup_key) => {
-            console.log("Done with backing up dir.  Backup key: " + JSON.stringify(backup_key));
-        }).finally(() => {
-            process_dir.close();
-            return store.close();
-        })
+        return Q.all(
+            paths.map((fullpath) => {
+                var fullpath = path.resolve(fullpath);
+                console.log("Processing " + fullpath)
+                return process_dir.process(fullpath, store).then((res) => {
+                    return store.storeBackup(fullpath, res);
+                }).then((backup_key) => {
+                    console.log("Done with backing up dir.  Backup key: " + JSON.stringify(backup_key));
+                }).finally(() => {
+                    process_dir.close();
+                    return store.close();
+                })
+            })
+        );
     }).then(() => {
         console.log("DONE");
     }).done();

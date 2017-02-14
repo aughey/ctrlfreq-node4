@@ -21,8 +21,15 @@ function set(key,value) {
 	return Q(true);
 }
 
+function eachKey(cb) {
+	for(var key in stat_cache) {
+		cb(key);
+	}
+}
+
 module.exports = {
 	get: get,
 	set: set,
+	eachKey: eachKey,
 	close: close
 }
