@@ -3,13 +3,11 @@ var Q = require('q');
 var path = require('path');
 var excludes = require('./file_excludes');
 var hash = require('./hash');
+var stat_cache = require("./stat_cache");
 
 function chunkFile(file, store) {
-    // Chunkfile could safely error out, so we create our own deferral
-    var deferred = Q.defer();
-
     var g_fd = null;
-    Q.ninvoke(fs, 'open', file.fullpath, 'r').then((fd) => {
+    return Q.ninvoke(fs, 'open', file.fullpath, 'r').then((fd) => {
         g_fd = fd;
         console.log("Opened: " + file.fullpath + " ");
 
@@ -22,11 +20,10 @@ function chunkFile(file, store) {
                 bytesread = bytesread[0];
                 if (bytesread === 0) {
                     console.log("Read all of file: " + file.fullpath);
-                    store.storeFile(file,chunks).then((f) => {
-                        deferred.resolve(f);
-                    }).done();
+                    return chunks
                 } else {
                     return store.storeChunk(buffer).then(function(chunk_data) {
+                        console.log(chunk_data);
                         chunks.push(chunk_data);
                         return nextChunk();
                     })
@@ -45,22 +42,55 @@ function chunkFile(file, store) {
         console.log("Error reading: " + file.fullpath);
         console.log(typeof error);
         console.log(error);
-        deferred.resolve(null);
+        return null;
+    })
+}
 
-    }).done();
-
-    return deferred.promise;
+function obj_equals(a, b) {
+    for (var key in b) {
+        if (a[key] !== b[key]) {
+            return false;
+        }
+    }
+    return true;
 }
 
 function processFile(file, store) {
+    function doanyway() {
+        return chunkFile(file, store).then((chunks) => {
+            return stat_cache.set(file.fullpath, {
+                stat: file.stat,
+                chunks: chunks
+            }).then(() => {
+                return chunks;
+            });
+        });
+    }
+
     // console.log("Processing file: " + file.fullpath);
-    return store.need_to_store_file(file).then((store_cache) => {
-        if (store_cache) {
-            return store_cache;
+    return stat_cache.get(file.fullpath).then((olddata) => {
+        if (olddata && obj_equals(olddata.stat, file.stat)) {
+            return store.hasAllChunks(olddata.chunks).then((hasall) => {
+                if (hasall) {
+                    return olddata.chunks;
+                } else {
+                    return doanyway();
+                }
+            });
         } else {
-            return chunkFile(file, store);
+            return doanyway();
         }
-    })
+    });
+
+    /*
+        return store.need_to_store_file(file).then((store_cache) => {
+            if (store_cache) {
+                return store_cache;
+            } else {
+                return chunkFile(file, store);
+            }
+        })
+        */
 }
 
 function safeStat(fullpath) {
@@ -70,7 +100,7 @@ function safeStat(fullpath) {
 
     Q.nfcall(fs.stat, fullpath).then((s) => {
         deferred.resolve(s);
-    }).catch(function (error) {
+    }).catch(function(error) {
         console.log("Stat error: " + error);
         console.log(typeof error);
         console.log(error);
@@ -104,9 +134,9 @@ function process(dirname, store) {
                     uid: stat.uid,
                     gid: stat.gid,
                     size: stat.size,
-                    mtime: stat.mtime
+                    mtime: stat.mtime.getTime()
                 }
-                storestat.mtime = storestat.mtime / 1000;
+                //storestat.mtime = parseInt(storestat.mtime / 1000);
                 var info = {
                     fullpath: fullpath,
                     file: file,
@@ -134,19 +164,21 @@ function process(dirname, store) {
         });
 
         var stored_files = [];
+
         function nextFile(laststore) {
-            if(laststore) {
+            if (laststore) {
                 stored_files.push(laststore);
             }
             var file = files.pop();
             if (!file) {
-                return store.storeDirectory(dirname,stored_dirs,stored_files);
+                return store.storeDirectory(dirname, stored_dirs, stored_files);
             } else {
                 return processFile(file, store).then(nextFile);
             }
         }
 
         var stored_dirs = [];
+
         function nextDir() {
             var dir = dirs.pop();
             if (!dir) {
@@ -154,7 +186,7 @@ function process(dirname, store) {
                 return nextFile();
             } else {
                 return process(dir.fullpath, store).then((s) => {
-                    if(s) {
+                    if (s) {
                         stored_dirs.push(s);
                     } else {
                         console.log("Weird, nothing returned for dir")
@@ -168,5 +200,8 @@ function process(dirname, store) {
 }
 
 module.exports = {
-    process: process
+    process: process,
+    close: function() {
+        stat_cache.close();
+    }
 };
