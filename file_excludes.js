@@ -26,6 +26,9 @@ function isGood(file) {
     if(badfiles.includes(file)) {
         return false;
     }
+    if(file[0] === '~') {
+        return false;
+    }
     return true;
 }
 
