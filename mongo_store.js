@@ -64,17 +64,17 @@ function open(fast) {
             return {
 
                 hasAllChunks: function(c) {
-                    return chunks.find({
+                    return chunks.count({
                         _id: {
                             $in: c
                         }
-                    }).count().then(function(count) {
+                    }).then(function(count) {
                         return count === c.length;
                     }).catch((e) => {
                         console.log("Error querying chunks");
                         console.log(c.length);
                         console.log(JSON.stringify(c));
-                        throw(e);
+                        throw(e)
                     })
                 },
                 storeChunk: function(chunk) {
