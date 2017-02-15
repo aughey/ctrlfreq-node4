@@ -15,7 +15,7 @@ function chunkFile(file, store) {
 
         const size = 1048576 * 2 * 2; // 4M chunks
         var chunks = [];
-        var chunkcount = parseInt(file.size / size) + 1;
+        var chunkcount = Math.floor(file.stat.size / size) + 1;
 
         function nextChunk() {
             var buffer = Buffer.allocUnsafe(size);
@@ -31,8 +31,8 @@ function chunkFile(file, store) {
                     return chunks
                 } else {
                     return store.storeChunk(buffer).then(function(chunk_data) {
-                        console.log(file.name + " " + chunks.length + " of " + chunkcount + " " + chunk_data);
                         chunks.push(chunk_data);
+                        console.log(file.name + " " + chunks.length + " of " + chunkcount + " " + chunk_data);
                         return nextChunk();
                     })
                 }

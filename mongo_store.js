@@ -117,7 +117,6 @@ function open(fast) {
                         path: fullpath,
                         stored_on: new Date(),
                     }).then(function(res) {
-                        console.log("################ " + fullpath);
                         return digest;
                     })).catch((e) => {
                         if (e.code === 11000) {
