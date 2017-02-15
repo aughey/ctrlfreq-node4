@@ -5,7 +5,7 @@ var excludes = require('./file_excludes');
 var hash = require('./hash');
 var promiseLimit = require("./promise_limit");
 
-var file_limit = promiseLimit(10);
+var file_limit = promiseLimit(5);
 
 function chunkFile(file, store) {
     var g_fd = null;
@@ -13,10 +13,11 @@ function chunkFile(file, store) {
         g_fd = fd;
         console.log("Opened: " + file.fullpath + " ");
 
+        const size = 1048576 * 2 * 2; // 4M chunks
         var chunks = [];
+        var chunkcount = parseInt(file.size / size) + 1;
 
         function nextChunk() {
-            var size = 1048576 * 2 * 2; // 4M chunks
             var buffer = Buffer.allocUnsafe(size);
             return Q.nfcall(fs.read, fd, buffer, 0, buffer.length, null).then((bytesread) => {
                 bytesread = bytesread[0];
@@ -30,7 +31,7 @@ function chunkFile(file, store) {
                     return chunks
                 } else {
                     return store.storeChunk(buffer).then(function(chunk_data) {
-                        console.log(file.name + " " + chunks.length + " " + chunk_data);
+                        console.log(file.name + " " + chunks.length + " of " + chunkcount + " " + chunk_data);
                         chunks.push(chunk_data);
                         return nextChunk();
                     })
