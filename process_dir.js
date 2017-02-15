@@ -30,7 +30,7 @@ function chunkFile(file, store) {
                     return chunks
                 } else {
                     return store.storeChunk(buffer).then(function(chunk_data) {
-                        console.log(chunk_data);
+                        console.log(file.name + " " + chunks.length + " " + chunk_data);
                         chunks.push(chunk_data);
                         return nextChunk();
                     })
