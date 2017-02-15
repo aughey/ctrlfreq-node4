@@ -49,7 +49,7 @@ function chunkFile(file, store) {
     }).catch((error) => {
         console.log("Error reading: " + file.fullpath);
         console.log(typeof error);
-        console.log(JSON.stringify(error));
+        console.log(error);
         return null;
     })
 }

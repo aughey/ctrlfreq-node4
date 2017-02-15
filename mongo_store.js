@@ -47,26 +47,28 @@ function open(fast) {
                 return hasAllChunks([key]);
             }
 
+            function hasAllChunks(c) {
+                var original_count = c.length;
+                const max_query = 10;
+                var promises = [];
+                while (c.length > 0) {
+                    var q = c.splice(0, max_query);
+                    promises.push(
+                        chunks.find({
+                            _id: {
+                                $in: q
+                            }},{_id: 1}
+                        ).count()
+                    );
+                }
+                return Q.all(promises).then(function(results) {
+                    var totalcount = results.reduce((a, b) => a + b, 0);
+                    return totalcount === original_count;
+                })
+            }
+
             return {
-                hasAllChunks: function(c) {
-                    var original_count = c.length;
-                    const max_query = 10;
-                    var promises = [];
-                    while (c.length > 0) {
-                        var q = c.splice(0, max_query);
-                        promises.push(
-                            chunks.count({
-                                _id: {
-                                    $in: q
-                                }
-                            })
-                        );
-                    }
-                    return Q.all(promises).then(function(results) {
-                        var totalcount = results.reduce((a, b) => a + b, 0);
-                        return totalcount === original_count;
-                    })
-                },
+                hasAllChunks: hasAllChunks,
                 storeChunk: function(chunk) {
                     var digest = hash.hash(chunk);
 
