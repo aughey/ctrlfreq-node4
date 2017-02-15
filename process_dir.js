@@ -3,7 +3,6 @@ var Q = require('q');
 var path = require('path');
 var excludes = require('./file_excludes');
 var hash = require('./hash');
-var stat_cache = require("./stat_cache_level");
 var promiseLimit = require("./promise_limit");
 
 var file_limit = promiseLimit(10);
@@ -22,9 +21,9 @@ function chunkFile(file, store) {
             return Q.nfcall(fs.read, fd, buffer, 0, buffer.length, null).then((bytesread) => {
                 bytesread = bytesread[0];
                 buffer.length = bytesread;
-                buffer = buffer.slice(0,bytesread);
-                if(bytesread !== buffer.length) {
-                    throw "BUFFER NOT EQUAL" + [bytesread,buffer.length].join(',');
+                buffer = buffer.slice(0, bytesread);
+                if (bytesread !== buffer.length) {
+                    throw "BUFFER NOT EQUAL" + [bytesread, buffer.length].join(',');
                 }
                 if (bytesread === 0) {
                     console.log("Read all of file: " + file.fullpath);
@@ -63,7 +62,7 @@ function obj_equals(a, b) {
     return true;
 }
 
-function processFile(file, store) {
+function processFile(file, store, stat_cache) {
     function doanyway() {
         return chunkFile(file, store).then((chunks) => {
             if (!chunks) {
@@ -96,15 +95,6 @@ function processFile(file, store) {
         }
     });
 
-    /*
-        return store.need_to_store_file(file).then((store_cache) => {
-            if (store_cache) {
-                return store_cache;
-            } else {
-                return chunkFile(file, store);
-            }
-        })
-        */
 }
 
 function safeStat(fullpath) {
@@ -124,7 +114,7 @@ function safeStat(fullpath) {
     return deferred.promise;
 }
 
-function process(dirname, store) {
+function process(dirname, store, stat_cache) {
     // Clean up the path
     dirname = path.resolve(dirname);
     var dirobj = {
@@ -187,13 +177,15 @@ function process(dirname, store) {
         // We keep directories in this array
         var stored_dirs = [];
 
+
+
         // we store all the files at once, but it is actually
         // limited through file_limit.
         function storeAllFiles() {
             return Q.all(
-                files.map((f) => {
-                    return file_limit(() => {
-                        return processFile(f, store).then((chunks) => {
+                files.map(function(f) {
+                    return file_limit(function() {
+                        return processFile(f, store, stat_cache).then((chunks) => {
                             // Return the single element representation of this entry
                             return chunks ? (f.name + "*" + chunks.join(',')) : null;
                         })
@@ -217,7 +209,7 @@ function process(dirname, store) {
                 //return nextFile();
                 return storeAllFiles();
             } else {
-                return process(dir.fullpath, store).then((s) => {
+                return process(dir.fullpath, store, stat_cache).then((s) => {
                     if (s) {
                         // Store single element representation of this entry
                         stored_dirs.push(dir.name + "*" + s);
@@ -232,9 +224,7 @@ function process(dirname, store) {
     })
 }
 
+
 module.exports = {
-    process: process,
-    close: function() {
-        stat_cache.close();
-    }
+    process: process
 };

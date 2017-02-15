@@ -1,5 +1,4 @@
-const process_dir = require("./process_dir");
-const mongo_store = require("./mongo_store");
+const cf = require("./cf");
 const path = require('path');
 const Q = require('q');
 
@@ -19,32 +18,28 @@ var test_store = {
 }
 
 if (process.argv[2] === "DELETE") {
-    mongo_store.open(true).then(function(store) {
-        store.DELETE().then(() => {
-            return store.close();
+    cf.open().then(function(c) {
+        return c.DELETE().then(() => {
+            c.close();
         });
     }).done();
-
 } else {
     var paths = process.argv.slice(0);
     paths.shift();
     paths.shift();
     console.log(paths);
-    mongo_store.open().then(function(store) {
+    cf.open().then((c) => {
         return Q.all(
             paths.map((fullpath) => {
                 var fullpath = path.resolve(fullpath);
                 console.log("Processing " + fullpath)
-                return process_dir.process(fullpath, store).then((res) => {
-                    return store.storeBackup(fullpath, res);
-                }).then((backup_key) => {
+                return c.process(fullpath).then((backup_key) => {
                     console.log("Done with backing up dir.  Backup key: " + JSON.stringify(backup_key));
-                }).finally(() => {
-                    process_dir.close();
-                    return store.close();
-                })
+                });
             })
-        );
+        ).then(() => {
+            return c.close();
+        });
     }).then(() => {
         console.log("DONE");
     }).done();
