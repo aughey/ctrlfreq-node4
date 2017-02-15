@@ -5,16 +5,16 @@ var hash = require('./hash');
 var zlib = require('zlib');
 var snappy = require('snappy');
 
-if(process.env.CTRLFREQ4_MONGO) {
+if (process.env.CTRLFREQ4_MONGO) {
     mongo_url = process.env.CTRLFREQ4_MONGO;
 }
 
 function compress(data) {
-    return Q.ninvoke(snappy,'compress',data).then(function(res) {
-        return [res,'s'];
+    return Q.ninvoke(snappy, 'compress', data).then(function(res) {
+        return [res, 's'];
     })
-    return Q.ninvoke(zlib,'deflate',data).then(function(res) {
-        return [res,'z'];
+    return Q.ninvoke(zlib, 'deflate', data).then(function(res) {
+        return [res, 'z'];
     })
 }
 
@@ -44,37 +44,27 @@ function open(fast) {
             var dir_collection = db.collection("dirs");
 
             function isChunkStored(key) {
-                return Q(false);
-
-                var cursor = chunks.find({
-                    _id: key
-                });
-                //console.log("finding dir hash: " + key)
-                cursor.limit(1)
-                return cursor.count().then(function(count) {
-                    //console.log("Key: " + key + " returned " + count);
-                    if (count > 0) {
-                        return true;
-                    } else {
-                        return false;
-                    }
-                });
+                return hasAllChunks([key]);
             }
 
             return {
-
                 hasAllChunks: function(c) {
-                    return chunks.count({
-                        _id: {
-                            $in: c
-                        }
-                    }).then(function(count) {
-                        return count === c.length;
-                    }).catch((e) => {
-                        console.log("Error querying chunks");
-                        console.log(c.length);
-                        console.log(JSON.stringify(c));
-                        throw(e)
+                    var original_count = c.length;
+                    const max_query = 10;
+                    var promises = [];
+                    while (c.length > 0) {
+                        var q = c.splice(0, max_query);
+                        promises.push(
+                            chunks.count({
+                                _id: {
+                                    $in: q
+                                }
+                            })
+                        );
+                    }
+                    return Q.all(promises).then(function(results) {
+                        var totalcount = results.reduce((a, b) => a + b, 0);
+                        return totalcount === original_count;
                     })
                 },
                 storeChunk: function(chunk) {
