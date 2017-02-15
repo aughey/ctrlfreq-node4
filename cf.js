@@ -16,6 +16,22 @@ function open() {
         });
     }
 
+    function wrap_dir(dirname,root) {
+    	var info = mongo_store.getDir(root);
+
+    	return {
+    		files: function() {
+    		
+    		}
+    	}
+    }
+
+    function getLastBackup(dirname) {
+    	return store.getLastBackup(dirname).then((root) => {
+    		return wrap_dir(dirname,root);
+    	});
+    }
+
     return stat_cache.open().then((c) => {
         cache = c;
         return mongo_store.open();
@@ -35,7 +51,8 @@ function open() {
                 store = null;
                 cache = null;
 
-            }
+            },
+            getLastBackup: getLastBackup
         }
     });
 }
