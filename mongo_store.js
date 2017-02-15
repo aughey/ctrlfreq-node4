@@ -3,9 +3,19 @@ const Q = require('q');
 var mongo_url = 'mongodb://localhost:27017/ctrlfreq4';
 var hash = require('./hash');
 var zlib = require('zlib');
+var snappy = require('snappy');
 
 if(process.env.CTRLFREQ4_MONGO) {
     mongo_url = process.env.CTRLFREQ4_MONGO;
+}
+
+function compress(data) {
+    return Q.ninvoke(snappy,'compress',data).then(function(res) {
+        return [res,'s'];
+    })
+    return Q.ninvoke(zlib,'deflate',data).then(function(res) {
+        return [res,'z'];
+    })
 }
 
 function open(fast) {
@@ -71,11 +81,13 @@ function open(fast) {
                             return digest;
                             deferred.resolve(digest);
                         } else {
-                            return Q.ninvoke(zlib, 'deflate', chunk).then((compressed_buffer) => {
+                            return compress(chunk).then((compressed_buffer) => {
+                                var compressed_type = compressed_buffer[1];
+                                compressed_buffer = compressed_buffer[0];
                                 return chunks.insert({
                                     _id: digest,
                                     stored_on: new Date(),
-                                    compressed: true,
+                                    c: compressed_type,
                                     data: compressed_buffer
                                 }, {
                                     continueOnError: true
@@ -95,7 +107,7 @@ function open(fast) {
 
                 },
                 storeDirectory: function(fullpath, dirs, files) {
-                    var key = ['{fullpath:', JSON.stringify(fullpath), ", dirs:", JSON.stringify(dirs), ", files:", JSON.stringify(files), '}'].join('');
+                    var key = ['{fullpath:', JSON.stringify(fullpath), ",dirs:", JSON.stringify(dirs), ",files:", JSON.stringify(files), '}'].join('');
                     var digest = hash.hash(key);
 
                     return Q(dir_collection.insert({
@@ -105,6 +117,7 @@ function open(fast) {
                         path: fullpath,
                         stored_on: new Date(),
                     }).then(function(res) {
+                        console.log("################ " + fullpath);
                         return digest;
                     })).catch((e) => {
                         if (e.code === 11000) {

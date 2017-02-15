@@ -18,9 +18,14 @@ function chunkFile(file, store) {
 
         function nextChunk() {
             var size = 1048576 * 2 * 2; // 4M chunks
-            var buffer = new Buffer(size);
-            return Q.nfcall(fs.read, fd, buffer, 0, size, null).then((bytesread) => {
+            var buffer = Buffer.allocUnsafe(size);
+            return Q.nfcall(fs.read, fd, buffer, 0, buffer.length, null).then((bytesread) => {
                 bytesread = bytesread[0];
+                buffer.length = bytesread;
+                buffer = buffer.slice(0,bytesread);
+                if(bytesread !== buffer.length) {
+                    throw "BUFFER NOT EQUAL" + [bytesread,buffer.length].join(',');
+                }
                 if (bytesread === 0) {
                     console.log("Read all of file: " + file.fullpath);
                     return chunks
@@ -128,7 +133,9 @@ function process(dirname, store) {
     console.log("Processing dir: " + dirname);
 
     return Q.ninvoke(fs, "readdir", dirname).then((dirs) => {
-        dirs.sort();
+        // We want the files in sorted order
+        dirs = dirs.splice(0).sort();
+        // Start statting all of the files
         var stats = dirs.map((file) => {
             var fullpath = path.join(dirname, file);
 
@@ -137,17 +144,18 @@ function process(dirname, store) {
             }
 
             return safeStat(fullpath).then((stat) => {
+                // safeStat might return null if the file was inaccessable
                 if (!stat) {
                     return null;
                 }
                 var storestat = {
-                        mode: stat.mode,
-                        uid: stat.uid,
-                        gid: stat.gid,
-                        size: stat.size,
-                        mtime: stat.mtime.getTime()
-                    }
-                    //storestat.mtime = parseInt(storestat.mtime / 1000);
+                    mode: stat.mode,
+                    uid: stat.uid,
+                    gid: stat.gid,
+                    size: stat.size,
+                    mtime: stat.mtime.getTime()
+                };
+                //storestat.mtime = parseInt(storestat.mtime / 1000);
                 var info = {
                     fullpath: fullpath,
                     name: file,
@@ -162,6 +170,7 @@ function process(dirname, store) {
         });
         return (Q.all(stats));
     }).then((stats) => {
+        // Put the results of stats into file and dir buckets
         var dirs = [];
         var files = [];
         stats.forEach((f) => {
@@ -173,52 +182,45 @@ function process(dirname, store) {
                 files.push(f);
             }
         });
+        stats = null; // Not necessary, but nulling it out to prevent access
 
-        var stored_files = [];
+        // We keep directories in this array
+        var stored_dirs = [];
 
-        function nextFile(laststore) {
-            if (laststore) {
-                stored_files.push(laststore);
-            }
-            var file = files.pop();
-            if (!file) {
-                return store.storeDirectory(dirname, stored_dirs, stored_files);
-            } else {
-                return processFile(file, store).then(nextFile);
-            }
-        }
-
-        function runAllFiles() {
+        // we store all the files at once, but it is actually
+        // limited through file_limit.
+        function storeAllFiles() {
             return Q.all(
                 files.map((f) => {
                     return file_limit(() => {
                         return processFile(f, store).then((chunks) => {
-                            if (chunks) {
-                                stored_files.push({name: f.name, chunks: chunks});
-                            }
+                            // Return the single element representation of this entry
+                            return chunks ? (f.name + "*" + chunks.join(',')) : null;
                         })
                     })
                 })
-            ).then(() => {
-                return store.storeDirectory(dirname, stored_dirs, stored_files);                
+            ).then((stored_files) => {
+                // Filter out null files
+                stored_files = stored_files.filter(function(n) {
+                    return n !== null
+                });
+
+                return store.storeDirectory(dirname, stored_dirs, stored_files);
             });
         }
 
-        var stored_dirs = [];
 
         function nextDir() {
             var dir = dirs.pop();
             if (!dir) {
                 // Done with dirs, do files
                 //return nextFile();
-                return runAllFiles();
+                return storeAllFiles();
             } else {
                 return process(dir.fullpath, store).then((s) => {
                     if (s) {
-                        stored_dirs.push({
-                            name: dir.name,
-                            key: s
-                        });
+                        // Store single element representation of this entry
+                        stored_dirs.push(dir.name + "*" + s);
                     } else {
                         console.log("Weird, nothing returned for dir")
                     }
