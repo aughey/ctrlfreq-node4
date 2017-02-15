@@ -70,6 +70,11 @@ function open(fast) {
                         }
                     }).count().then(function(count) {
                         return count === c.length;
+                    }).catch((e) => {
+                        console.log("Error querying chunks");
+                        console.log(c.length);
+                        console.log(JSON.stringify(c));
+                        throw(e);
                     })
                 },
                 storeChunk: function(chunk) {
