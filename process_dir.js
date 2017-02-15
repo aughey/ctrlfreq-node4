@@ -4,6 +4,9 @@ var path = require('path');
 var excludes = require('./file_excludes');
 var hash = require('./hash');
 var stat_cache = require("./stat_cache_level");
+var promiseLimit = require("./promise_limit");
+
+var file_limit = promiseLimit(10);
 
 function chunkFile(file, store) {
     var g_fd = null;
@@ -14,7 +17,7 @@ function chunkFile(file, store) {
         var chunks = [];
 
         function nextChunk() {
-            var size = 1048576*2*2; // 4M chunks
+            var size = 1048576 * 2 * 2; // 4M chunks
             var buffer = new Buffer(size);
             return Q.nfcall(fs.read, fd, buffer, 0, size, null).then((bytesread) => {
                 bytesread = bytesread[0];
@@ -58,7 +61,7 @@ function obj_equals(a, b) {
 function processFile(file, store) {
     function doanyway() {
         return chunkFile(file, store).then((chunks) => {
-            if(!chunks) {
+            if (!chunks) {
                 return null;
             }
 
@@ -125,6 +128,7 @@ function process(dirname, store) {
     console.log("Processing dir: " + dirname);
 
     return Q.ninvoke(fs, "readdir", dirname).then((dirs) => {
+        dirs.sort();
         var stats = dirs.map((file) => {
             var fullpath = path.join(dirname, file);
 
@@ -137,16 +141,16 @@ function process(dirname, store) {
                     return null;
                 }
                 var storestat = {
-                    mode: stat.mode,
-                    uid: stat.uid,
-                    gid: stat.gid,
-                    size: stat.size,
-                    mtime: stat.mtime.getTime()
-                }
-                //storestat.mtime = parseInt(storestat.mtime / 1000);
+                        mode: stat.mode,
+                        uid: stat.uid,
+                        gid: stat.gid,
+                        size: stat.size,
+                        mtime: stat.mtime.getTime()
+                    }
+                    //storestat.mtime = parseInt(storestat.mtime / 1000);
                 var info = {
                     fullpath: fullpath,
-                    file: file,
+                    name: file,
                     isFile: stat.isFile(),
                     isDirectory: stat.isDirectory(),
                     stat: storestat
@@ -184,17 +188,37 @@ function process(dirname, store) {
             }
         }
 
+        function runAllFiles() {
+            return Q.all(
+                files.map((f) => {
+                    return file_limit(() => {
+                        return processFile(f, store).then((chunks) => {
+                            if (chunks) {
+                                stored_files.push({name: f.name, chunks: chunks});
+                            }
+                        })
+                    })
+                })
+            ).then(() => {
+                return store.storeDirectory(dirname, stored_dirs, stored_files);                
+            });
+        }
+
         var stored_dirs = [];
 
         function nextDir() {
             var dir = dirs.pop();
             if (!dir) {
                 // Done with dirs, do files
-                return nextFile();
+                //return nextFile();
+                return runAllFiles();
             } else {
                 return process(dir.fullpath, store).then((s) => {
                     if (s) {
-                        stored_dirs.push(s);
+                        stored_dirs.push({
+                            name: dir.name,
+                            key: s
+                        });
                     } else {
                         console.log("Weird, nothing returned for dir")
                     }
