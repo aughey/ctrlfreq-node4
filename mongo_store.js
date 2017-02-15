@@ -41,6 +41,7 @@ function open(fast) {
             var db = g_db;
             console.log("Connected to mongo");
             var chunks = db.collection("chunks");
+            var chunk_index = db.collection("chunk_index");
             var dir_collection = db.collection("dirs");
 
             function isChunkStored(key) {
@@ -49,12 +50,12 @@ function open(fast) {
 
             function hasAllChunks(c) {
                 var original_count = c.length;
-                const max_query = 10;
+                const max_query = 100;
                 var promises = [];
                 while (c.length > 0) {
                     var q = c.splice(0, max_query);
                     promises.push(
-                        chunks.find({
+                        chunk_index.find({
                             _id: {
                                 $in: q
                             }},{_id: 1}
@@ -86,8 +87,10 @@ function open(fast) {
                                     stored_on: new Date(),
                                     c: compressed_type,
                                     data: compressed_buffer
-                                }, {
-                                    continueOnError: true
+                                }).then(() => {
+                                    return chunk_index.insert({
+                                        _id: digest
+                                    });
                                 }).then(() => {
                                     return digest;
                                     deferred.resolve(digest);
