@@ -133,7 +133,7 @@ function process(dirname, store, stat_cache) {
     };
     console.log("Processing dir: " + dirname);
 
-    return Q.ninvoke(fs, "readdir", dirname).then((dirs) => {
+    return safeReaddir(dirname).then((dirs) => {
         // We want the files in sorted order
         dirs = dirs.splice(0).sort();
         // Start statting all of the files
