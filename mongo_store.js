@@ -18,6 +18,10 @@ function compress(data) {
     })
 }
 
+function decompress(data) {
+    return Q.ninvoke(snappy, 'uncompress', data);
+}
+
 function open(fast) {
     var g_db = null;
     return Q.ninvoke(MongoClient, "connect", mongo_url)
@@ -49,6 +53,7 @@ function open(fast) {
             }
 
             function hasAllChunks(c) {
+                c = c.slice(0);
                 var original_count = c.length;
                 const max_query = 100;
                 var promises = [];
@@ -70,6 +75,11 @@ function open(fast) {
 
             return {
                 hasAllChunks: hasAllChunks,
+                getChunk: function(digest) {
+                    return chunks.findOne({_id: digest}).then((res) => {
+                        return decompress(res.data.buffer);
+                    });
+                },
                 storeChunk: function(chunk) {
                     var digest = hash.hash(chunk);
 
@@ -123,6 +133,21 @@ function open(fast) {
                             return digest;
                         } else {
                             throw (e);
+                        }
+                    });
+                },
+                getLastBackup: function(fullpath) {
+                    return db.collection('backups').findOne({
+                        path: fullpath
+                    },null,{order: {stored_on: -1}}).then(function(res) {
+                        return res.root;
+                    })
+                },
+                getDir: function(key) {
+                    return dir_collection.findOne({_id: key}).then((res) => {
+                        return {
+                            files: res.files,
+                            dirs: res.dirs
                         }
                     });
                 },

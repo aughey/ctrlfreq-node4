@@ -48,7 +48,7 @@ function chunkFile(file, store) {
         }
     }).catch((error) => {
         console.log("Error reading: " + file.fullpath);
-        if(error.code === 'EACCES') {
+        if (error.code === 'EACCES') {
             console.log("  Permission denied");
         } else {
             console.log(error);
@@ -72,7 +72,6 @@ function processFile(file, store, stat_cache) {
             if (!chunks) {
                 return null;
             }
-
             return stat_cache.set(file.fullpath, {
                 stat: file.stat,
                 chunks: chunks
@@ -201,6 +200,15 @@ function process(dirname, store, stat_cache) {
                     return file_limit(function() {
                         return processFile(f, store, stat_cache).then((chunks) => {
                             // Return the single element representation of this entry
+                            if(f.name === '3rd-party-licenses.txt') {
+                                console.log(f);
+                                console.log(chunks);
+                            }
+                            if(f.stat.size > 0 && chunks.length === 0) {
+                                console.log("Not possible to have size and no chunks");
+                                console.log(f);
+                                throw("ERROR");
+                            }
                             return chunks ? (f.name + "*" + chunks.join(',')) : null;
                         })
                     })
@@ -210,6 +218,9 @@ function process(dirname, store, stat_cache) {
                 stored_files = stored_files.filter(function(n) {
                     return n !== null
                 });
+                if(dirname === 'C:\\jha\\nmap-7.00') {
+                    console.log(stored_files);
+                }
 
                 return store.storeDirectory(dirname, stored_dirs, stored_files);
             });
