@@ -204,7 +204,7 @@ function process(dirname, store, stat_cache) {
                                 console.log(f);
                                 console.log(chunks);
                             }
-                            if(f.stat.size > 0 && chunks.length === 0) {
+                            if(f.stat.size > 0 && chunks && chunks.length === 0) {
                                 console.log("Not possible to have size and no chunks");
                                 console.log(f);
                                 throw("ERROR");
