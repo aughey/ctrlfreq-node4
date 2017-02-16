@@ -137,10 +137,11 @@ function open(fast) {
                     });
                 },
                 getLastBackup: function(fullpath) {
-                    return db.collection('backups').findOne({
+                    return db.collection('backups').find({
                         path: fullpath
-                    },null,{order: {stored_on: -1}}).then(function(res) {
-                        return res.root;
+                    },{order: {stored_on: -1}, limit: 1}).toArray().then(function(res) {
+                      console.log(res[0]);
+                        return res[0].root;
                     })
                 },
                 getDir: function(key) {

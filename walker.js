@@ -58,7 +58,10 @@ cf.open().then(function(c) {
     return Q.all(
         paths.map((p) => {
             p = path.resolve(p);
-            return c.getLastBackup(p).then(walk)
+            return c.getLastBackup(p).then((b) => {
+              console.log("Walking: " + b.id);
+              return walk(b);
+            })
         })
     ).then(() => {
         console.log("CLOSING");

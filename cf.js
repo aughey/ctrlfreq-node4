@@ -81,6 +81,7 @@ function open() {
                     return next();
                 },
                 name: prefix,
+                id: root
             }
         });
 
