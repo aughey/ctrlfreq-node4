@@ -115,6 +115,16 @@ function safeStat(fullpath) {
     return deferred.promise;
 }
 
+function safeReaddir(dirname) {
+    return Q.ninvoke(fs, "readdir", dirname).then((dirs) => {
+        return dirs;
+    }).catch((e) => {
+        console.log("Readdir failed for " + dirname + ", returning empty list");
+        return [];
+    });
+}
+
+
 function process(dirname, store, stat_cache) {
     // Clean up the path
     dirname = path.resolve(dirname);
@@ -222,7 +232,7 @@ function process(dirname, store, stat_cache) {
             }
         }
         return nextDir();
-    })
+    });
 }
 
 
