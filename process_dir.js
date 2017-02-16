@@ -48,8 +48,11 @@ function chunkFile(file, store) {
         }
     }).catch((error) => {
         console.log("Error reading: " + file.fullpath);
-        console.log(typeof error);
-        console.log(error);
+        if(error.code === 'EACCES') {
+            console.log("  Permission denied");
+        } else {
+            console.log(error);
+        }
         return null;
     })
 }
