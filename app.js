@@ -1,24 +1,9 @@
-const cf = require("./cf");
+const cf = require("./cf2");
 const path = require('path');
 const Q = require('q');
 
-var test_store = {
-    need_to_store_file: function() {
-        return Q(null);
-    },
-    storeChunk: function() {
-        return Q(null);
-    },
-    storeFile: function(file, chunk_info) {
-        return Q(null);
-    },
-    storeDirectory: function(dirs, files) {
-        return Q(null);
-    }
-}
-
 if (process.argv[2] === "DELETE") {
-    cf.open().then(function(c) {
+    cf.commonOpen().then(function(c) {
         return c.DELETE().then(() => {
             c.close();
         });
@@ -28,7 +13,7 @@ if (process.argv[2] === "DELETE") {
     paths.shift();
     paths.shift();
     console.log(paths);
-    cf.open().then((c) => {
+    cf.commonOpen().then((c) => {
         return Q.all(
             paths.map((fullpath) => {
                 var fullpath = path.resolve(fullpath);
