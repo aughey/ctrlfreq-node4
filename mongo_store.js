@@ -18,28 +18,31 @@ function compress(data) {
     })
 }
 
-function decompress(data) {
-    return Q.ninvoke(snappy, 'uncompress', data);
+function decompress(data, type) {
+    if (type === 's') {
+        return Q.ninvoke(snappy, 'uncompress', data);
+    } else if (type === 'z') {
+        return Q.ninvoke(zlib, 'inflate', data);
+    } else {
+        throw ("Unknown decompression scheme " + type);
+    }
 }
 
 function open(fast) {
     var g_db = null;
+
+    function stats() {
+        var qs = [];
+        qs.push(g_db.collection('chunks').count());
+        qs.push(g_db.collection('dirs').count());
+        qs.push(g_db.stats());
+
+        return Q.all(qs);
+    }
+
     return Q.ninvoke(MongoClient, "connect", mongo_url)
         .then((db) => {
             g_db = db;
-            if (!fast) {
-                var qs = [];
-                qs.push(db.collection('chunks').count());
-                qs.push(db.collection('dirs').count());
-
-                return Q.all(qs);
-            } else {
-                return Q([0, 0, 0]);
-            }
-        })
-        .then((results) => {
-            console.log("Chunks: " + results[0]);
-            console.log("Directories: " + results[1]);
         })
         .then(function() {
             var db = g_db;
@@ -63,8 +66,10 @@ function open(fast) {
                         chunk_index.find({
                             _id: {
                                 $in: q
-                            }},{_id: 1}
-                        ).count()
+                            }
+                        }, {
+                            _id: 1
+                        }).count()
                     );
                 }
                 return Q.all(promises).then(function(results) {
@@ -76,8 +81,10 @@ function open(fast) {
             return {
                 hasAllChunks: hasAllChunks,
                 getChunk: function(digest) {
-                    return chunks.findOne({_id: digest}).then((res) => {
-                        return decompress(res.data.buffer);
+                    return chunks.findOne({
+                        _id: digest
+                    }).then((res) => {
+                        return decompress(res.data.buffer, res.c);
                     });
                 },
                 storeChunk: function(chunk) {
@@ -139,13 +146,20 @@ function open(fast) {
                 getLastBackup: function(fullpath) {
                     return db.collection('backups').find({
                         path: fullpath
-                    },{sort: [['stored_on','descending']], limit: 1}).toArray().then(function(res) {
-                      console.log(res[0]);
+                    }, {
+                        sort: [
+                            ['stored_on', 'descending']
+                        ],
+                        limit: 1
+                    }).toArray().then(function(res) {
+                        console.log(res[0]);
                         return res[0].root;
                     })
                 },
                 getDir: function(key) {
-                    return dir_collection.findOne({_id: key}).then((res) => {
+                    return dir_collection.findOne({
+                        _id: key
+                    }).then((res) => {
                         return {
                             files: res.files,
                             dirs: res.dirs
@@ -165,16 +179,10 @@ function open(fast) {
                     });
                 },
                 close: function() {
-                    var qs = [];
-                    qs.push(db.collection('chunks').count());
-                    qs.push(db.collection('dirs').count());
-                    qs.push(db.stats());
-                    return Q.all(qs).then((results) => {
-                        console.log("Chunks: " + results[0]);
-                        console.log("Directories: " + results[1]);
-                        console.log("Stats: " + JSON.stringify(results[2]));
+                    return stats().then((res) => {
+                        console.log(res);
                     }).then(() => {
-                        qs.push(db.close());
+                        return db.close();
                     })
                 },
                 DELETE: function() {
