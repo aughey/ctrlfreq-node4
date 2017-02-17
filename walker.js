@@ -1,10 +1,10 @@
-var cf = require('./cf');
+var cf = require('./cf2');
 var path = require('path');
 var Q = require('q')
 var fs = require('fs');
 
 function checkFile(f, indent) {
-    console.log(indent + f.fullpath);
+    console.log("Check File:" + indent + f.fullpath);
     var g_fd;
     var bytes_remaining;
     return Q.ninvoke(fs, 'open', f.fullpath, 'r').then(function(fd) {
@@ -12,7 +12,7 @@ function checkFile(f, indent) {
         var stat = fs.fstatSync(fd);
         bytes_remaining = stat.size;
         return f.eachChunk((chunk) => {
-            console.log(chunk.length);
+            console.log("GOT CHUNK: " + chunk.length);
             var buffer = Buffer.allocUnsafe(chunk.length);
             return Q.ninvoke(fs, 'read', fd, buffer, 0, buffer.length, null).then(function(data) {
                 data = data[1];
@@ -51,7 +51,7 @@ function walk(dir, indent) {
     })
 }
 
-cf.open().then(function(c) {
+cf.commonOpen().then(function(c) {
     var paths = process.argv.slice(0);
     paths.shift();
     paths.shift();
@@ -67,4 +67,7 @@ cf.open().then(function(c) {
         console.log("CLOSING");
         c.close();
     });
+}).catch((e) => {
+    console.log(JSON.stringify(e));
+    throw(e);
 }).done();

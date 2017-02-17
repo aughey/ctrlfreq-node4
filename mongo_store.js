@@ -51,7 +51,7 @@ function open(fast) {
             var chunk_index = db.collection("chunk_index");
             var dir_collection = db.collection("dirs");
 
-            function isChunkStored(key) {
+            function hasChunk(key) {
                 return hasAllChunks([key]);
             }
 
@@ -80,21 +80,29 @@ function open(fast) {
 
             return {
                 hasAllChunks: hasAllChunks,
-                getChunk: function(digest) {
+                getChunk: function(digest, do_not_validate) {
                     return chunks.findOne({
                         _id: digest
                     }).then((res) => {
-                        return decompress(res.data.buffer, res.c);
+                        return decompress(res.data.buffer, res.c).then((data) => {
+                            if(do_not_validate) {
+                                return data;
+                            } else {
+                                var thisdigest = hash.hash(data);
+                                if(thisdigest !== digest) {
+                                    throw("Digest validate error on getChunk");
+                                }
+                                return data;
+                            }
+                        });
                     });
                 },
                 storeChunk: function(chunk) {
                     var digest = hash.hash(chunk);
 
-
-                    return isChunkStored(digest).then((isstored) => {
+                    return hasChunk(digest).then((isstored) => {
                         if (isstored) {
                             return digest;
-                            deferred.resolve(digest);
                         } else {
                             return compress(chunk).then((compressed_buffer) => {
                                 var compressed_type = compressed_buffer[1];
@@ -110,7 +118,6 @@ function open(fast) {
                                     });
                                 }).then(() => {
                                     return digest;
-                                    deferred.resolve(digest);
                                 }).catch((e) => {
                                     if (e.code === 11000) {
                                         return digest;
@@ -124,7 +131,8 @@ function open(fast) {
 
                 },
                 storeDirectory: function(fullpath, dirs, files) {
-                    var key = ['{fullpath:', JSON.stringify(fullpath), ",dirs:", JSON.stringify(dirs), ",files:", JSON.stringify(files), '}'].join('');
+                    // Note new key on 2/17/2017
+                    var key = ["fullpath",JSON.stringify(fullpath),"dirs",JSON.stringify(dirs),"files",JSON.stringify(files)].join(',');
                     var digest = hash.hash(key);
 
                     return Q(dir_collection.insert({

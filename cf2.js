@@ -2,11 +2,23 @@ var Q = require('q');
 //var process_dir = require("./process_dir");
 const path = require('path');
 var promiseLimit = require("./promise_limit");
+var genericArrayPromiseIterator = require('./generic_array_promise_iterator');
 
 var file_limit = promiseLimit(5);
 
 function joinNameChunks(name, keys) {
     return [name, keys.join(',')].join('*');
+}
+
+function splitNameChunks(f) {
+    var star = f.indexOf("*");
+    var name = f.slice(0, star);
+    var chunks = f.slice(star + 1).split(',');
+    return {
+        name: name,
+        chunks: chunks,
+        f: f
+    };
 }
 
 function processSubDirs(d, store) {
@@ -42,7 +54,7 @@ function processFiles(d, store) {
     var file_info = [];
     return d.forEachFile((file) => {
         // See if we already know the chunks of this file
-      //  console.log(file.fullpath);
+        //  console.log(file.fullpath);
         return file.getCachedChunks().then((chunks) => {
             if (!chunks) {
                 console.log("Cached chunks not available");
@@ -59,8 +71,8 @@ function processFiles(d, store) {
                 })
             }
         }).then((chunks) => {
-            if(chunks) {
-                file_info.push(joinNameChunks(file.name,chunks));
+            if (chunks) {
+                file_info.push(joinNameChunks(file.name, chunks));
             }
         })
     }).then(() => {
@@ -97,7 +109,10 @@ function commonOpen() {
 
         var file_system_reader = require("./file_system_reader");
 
-        var dir = file_system_reader.wrap_dir({fullpath: dirname, name: "ROOT"}, cache);
+        var dir = file_system_reader.wrap_dir({
+            fullpath: dirname,
+            name: "ROOT"
+        }, cache);
 
         return processDir(dir, store).then((res) => {
             return store.storeBackup(dirname, res);
@@ -116,6 +131,7 @@ function commonOpen() {
             DELETE: function() {
                 return store.DELETE();
             },
+            getLastBackup: getLastBackup,
             close: function() {
                 return Q.all([
                     store.close(),
@@ -126,6 +142,12 @@ function commonOpen() {
             }
         }
     });
+
+    function getLastBackup(dirname) {
+        return store.getLastBackup(dirname).then((root) => {
+            return wrap_dir(dirname, root);
+        });
+    }
 
     // function split_file(f) {
     //     var star = f.indexOf("*");
@@ -151,61 +173,40 @@ function commonOpen() {
     //     return next();
     // }
 
-    // function wrap_file(info) {
-    //     info.eachChunk = function(cb) {
-    //         return genericArrayPromiseIterator(info.chunks, (c) => {
-    //             return store.getChunk(c)
-    //         }, cb);
-    //     }
-    //     return info;
-    // }
+    function wrap_file(info) {
+        info.eachChunk = function(cb) {
+            return genericArrayPromiseIterator(info.chunks, (c) => {
+                return store.getChunk(c)
+            }, cb);
+        }
+        return info;
+    }
 
-    // function wrap_dir(prefix, root) {
-    //     return store.getDir(root).then((d) => {
-    //         return {
-    //             eachFile: function(cb) {
-    //                 var files = d.files.slice(0);
+    function wrap_dir(prefix, root) {
+        return store.getDir(root).then((d) => {
+            return {
+                eachFile: function(cb) {
+                    return genericArrayPromiseIterator(d.files, (f) => {
+                        f = splitNameChunks(f);
+                        f.root = root;
+                        f.fullpath = path.join(prefix, f.name);
+                        return wrap_file(f);
+                    }, cb);
+                },
+                eachDir: function(cb) {
+                    return genericArrayPromiseIterator(d.dirs, (d) => {
+                        d = splitNameChunks(d);
+                        return wrap_dir(path.join(prefix, d.name), d.chunks[0])
+                    }, cb)
+                },
+                name: prefix,
+                id: root
+            }
+        });
 
-    //                 function next() {
-    //                     var d = files.shift();
-    //                     if (!d) {
-    //                         return Q(null);
-    //                     }
-    //                     d = split_file(d);
-    //                     d.root = root;
-    //                     d.fullpath = path.join(prefix, d.name);
-    //                     return cb(wrap_file(d)).then(next);
-    //                 }
+    }
 
-    //                 return next();
-    //             },
-    //             eachDir: function(cb) {
-    //                 var dirs = d.dirs.slice(0);
 
-    //                 function next() {
-    //                     var d = dirs.shift();
-    //                     if (!d) {
-    //                         return Q(null);
-    //                     }
-    //                     d = split_file(d);
-    //                     return wrap_dir(path.join(prefix, d.name), d.chunks[0]).then((res) => {
-    //                         return cb(res).then(next);
-    //                     });
-    //                 }
-    //                 return next();
-    //             },
-    //             name: prefix,
-    //             id: root
-    //         }
-    //     });
-
-    // }
-
-    // function getLastBackup(dirname) {
-    //     return store.getLastBackup(dirname).then((root) => {
-    //         return wrap_dir(dirname, root);
-    //     });
-    // }
 
     // return stat_cache.open().then((c) => {
     //     cache = c;
