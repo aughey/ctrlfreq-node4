@@ -43,6 +43,15 @@ function open(fast) {
     return Q.ninvoke(MongoClient, "connect", mongo_url)
         .then((db) => {
             g_db = db;
+            return db.collection("chunks").createIndex({digest:1},{unique: true});
+        }).then(() => {
+            return g_db.collection("config").findOne({task: 'created_digest'})
+        }).then((res) => {
+            if(!res) {
+                console.log("Need to create digest first");
+                console.log("db.chunks.find({}).forEach((c) => { db.chunks.update({_id: c._id},{digest: c._id}); })")
+                throw("STOP");
+            }
         })
         .then(function() {
             var db = g_db;
@@ -63,13 +72,13 @@ function open(fast) {
                 while (c.length > 0) {
                     var q = c.splice(0, max_query);
                     promises.push(
-                        chunk_index.find({
-                            _id: {
+                        chunks.find({
+                            digest: {
                                 $in: q
                             }
                         }, {
-                            _id: 1
-                        }).count()
+                            digest: 1
+                        },null).count()
                     );
                 }
                 return Q.all(promises).then(function(results) {
@@ -82,7 +91,7 @@ function open(fast) {
                 hasAllChunks: hasAllChunks,
                 getChunk: function(digest, do_not_validate) {
                     return chunks.findOne({
-                        _id: digest
+                        digest: digest
                     }).then((res) => {
                         return decompress(res.data.buffer, res.c).then((data) => {
                             if(do_not_validate) {
@@ -108,7 +117,7 @@ function open(fast) {
                                 var compressed_type = compressed_buffer[1];
                                 compressed_buffer = compressed_buffer[0];
                                 return chunks.insert({
-                                    _id: digest,
+                                    digest: digest,
                                     stored_on: new Date(),
                                     c: compressed_type,
                                     data: compressed_buffer
