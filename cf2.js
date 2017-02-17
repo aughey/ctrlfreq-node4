@@ -1,6 +1,9 @@
 var Q = require('q');
 //var process_dir = require("./process_dir");
 const path = require('path');
+var promiseLimit = require("./promise_limit");
+
+var file_limit = promiseLimit(5);
 
 function joinNameChunks(name, keys) {
     return [name, keys.join(',')].join('*');

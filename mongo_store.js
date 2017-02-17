@@ -139,7 +139,7 @@ function open(fast) {
                 getLastBackup: function(fullpath) {
                     return db.collection('backups').find({
                         path: fullpath
-                    },{order: {stored_on: -1}, limit: 1}).toArray().then(function(res) {
+                    },{sort: [['stored_on','descending']], limit: 1}).toArray().then(function(res) {
                       console.log(res[0]);
                         return res[0].root;
                     })
